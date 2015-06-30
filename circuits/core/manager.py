@@ -510,9 +510,10 @@ class Manager(object):
         }
 
         def _on_event(self, event, *args, **kwargs):
-            if not state['run'] and (
-                    event_object is None or event is event_object
-            ):
+            if state['run']:
+                return
+
+            if event_object is None or event is event_object:
                 self.removeHandler(_on_event_handler, event_name)
                 event.alert_done = True
                 state['run'] = True
@@ -521,14 +522,17 @@ class Manager(object):
         def _on_done(self, event, *args, **kwargs):
             if state['event'] == event.parent:
                 state['flag'] = True
-                self.registerTask((state['task_event'],
-                                   state['task'],
-                                   state['parent']))
+                if "task_event" in state:
+                    self.registerTask((state['task_event'],
+                                       state['task'],
+                                       state['parent']))
                 if state['timeout'] > 0:
                     self.removeHandler(
                         state['tick_handler'],
                         "generate_events"
                     )
+
+            self.removeHandler(_on_done_handler, "%s_done" % event_name)
 
         def _on_tick(self):
             if state['timeout'] == 0:
@@ -576,9 +580,12 @@ class Manager(object):
         that will be invoked by the main loop until the event has
         been dispatched (see :func:`circuits.core.handlers.handler`).
         """
+
         value = self.fire(event, *channels)
+
         for r in self.waitEvent(event, *event.channels, **kwargs):
             yield r
+
         yield CallValue(value)
 
     call = callEvent
@@ -897,11 +904,14 @@ class Manager(object):
                 event.waitingHandlers += 1
                 self.registerTask(task.task)
             elif event.waitingHandlers == 0:
+                self.unregisterTask((event, task, parent))
                 event.value.inform(True)
                 self._eventDone(event)
         except KeyboardInterrupt:
+            self.unregisterTask((event, task, parent))
             self.stop()
         except SystemExit as e:
+            self.unregisterTask((event, task, parent))
             self.stop(e.code)
         except:
             self.unregisterTask((event, task, parent))

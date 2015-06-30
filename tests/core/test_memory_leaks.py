@@ -1,6 +1,13 @@
-from circuits import Event, Component
 import pytest
+
+
+from time import sleep
+
+
 import resource
+
+
+from circuits import Event, Component
 
 
 class test(Event):
@@ -12,11 +19,12 @@ class test_call(Event):
 
 
 class App(Component):
+
     def test(self):
         return 'Hello World!'
 
     def test_call(self):
-        for _ in range(10000):
+        for _ in range(10):
             yield self.call(test())
 
     @property
@@ -38,33 +46,52 @@ def app(request):
 
 def test_memory_call(app):
     start_memory = app.memory
+
     event = test_call()
 
-    for _ in range(10000):
-        for _ in app.call(event):
-            pass
+    x = app.call(event)
 
-    assert app.memory == start_memory
+    while True:
+        try:
+            next(x)
+        except StopIteration:
+            break
+
+    while app._queue or app._tasks:
+        sleep(0.1)
+
+    delta = app.memory - start_memory
+    assert delta == 0
+
+
+def test_memory_wait(app):
+    start_memory = app.memory
+
+    app.fire(test())
+
+    x = app.wait("test")
+
+    while True:
+        try:
+            next(x)
+        except StopIteration:
+            break
+
+    while app._queue or app._tasks:
+        sleep(0.1)
+
+    delta = app.memory - start_memory
+    assert delta == 0
 
 
 def test_memory_fire(app):
     start_memory = app.memory
 
-    for _ in range(10000):
+    for _ in range(10):
         app.fire(test())
 
-    while len(app):
-        pass
+    while app._queue or app._tasks:
+        sleep(0.1)
 
-    assert app.memory == start_memory
-
-
-def test_memory_wait(app):
-    start_memory = app.memory
-    event = test()
-
-    for _ in range(10000):
-        for _ in app.waitEvent(event):
-            pass
-
-    assert app.memory == start_memory
+    delta = app.memory - start_memory
+    assert delta == 0
